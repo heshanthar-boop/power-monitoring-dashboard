@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#1e3a5f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Power Monitor — Live Dashboard</title>
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Firebase compat SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+
+  <style>
+    :root {
+      --bg:       #0d1117;
+      --bg2:      #161b22;
+      --bg3:      #21262d;
+      --border:   #30363d;
+      --text:     #e6edf3;
+      --muted:    #8b949e;
+      --accent:   #58a6ff;
+      --good:     #3fb950;
+      --warn:     #d29922;
+      --danger:   #f85149;
+      --radius:   10px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+      font-size: 14px;
+    }
+
+    /* HEADER */
+    header {
+      position: fixed; top: 0; left: 0; right: 0; height: 52px;
+      background: var(--bg2); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px; z-index: 100;
+    }
+    .header-title { font-size: 1rem; font-weight: 700; color: var(--accent); }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    #online-badge {
+      font-size: 0.72rem; padding: 3px 10px; border-radius: 20px;
+      background: var(--bg3); color: var(--muted); border: 1px solid var(--border);
+      font-weight: 600;
+    }
+    #online-badge.online  { background: rgba(63,185,80,0.15); color: var(--good); border-color: var(--good); }
+    #online-badge.offline { background: rgba(248,81,73,0.15); color: var(--danger); border-color: var(--danger); }
+    #online-badge.stale   { background: rgba(210,153,34,0.15); color: var(--warn); border-color: var(--warn); }
+
+    /* SIGN-IN */
+    #signin-btn {
+      height: 32px; padding: 0 12px; border-radius: var(--radius);
+      background: var(--accent); color: #0d1117; border: none; cursor: pointer;
+      font-size: 0.8rem; font-weight: 700;
+    }
+    #signin-btn.signed-in {
+      background: var(--bg3); color: var(--text); border: 1px solid var(--border);
+      display: flex; align-items: center; gap: 6px;
+    }
+    #signin-btn img { width: 20px; height: 20px; border-radius: 50%; }
+
+    /* ACCOUNT MENU */
+    .account-menu {
+      position: fixed; z-index: 999; background: var(--bg2);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5); min-width: 200px; overflow: hidden;
+    }
+    .account-email { padding: 10px 14px; font-size: 0.75rem; color: var(--muted); border-bottom: 1px solid var(--border); word-break: break-all; }
+    .account-item { display: block; width: 100%; padding: 10px 14px; text-align: left; background: none; border: none; color: var(--text); font-size: 0.85rem; cursor: pointer; }
+    .account-item:hover { background: var(--bg3); }
+    .account-danger { color: var(--danger); }
+
+    /* MAIN */
+    main {
+      padding-top: 68px; padding-bottom: 20px;
+      max-width: 1200px; margin: 0 auto; padding-left: 12px; padding-right: 12px;
+    }
+
+    /* SITE SELECTOR */
+    #site-bar {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    #site-bar label { color: var(--muted); font-size: 0.82rem; }
+    #site-select {
+      background: var(--bg2); color: var(--text); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 6px 10px; font-size: 0.85rem;
+    }
+    #last-update { font-size: 0.75rem; color: var(--muted); margin-left: auto; }
+
+    /* KPI STRIP */
+    #kpi-strip {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px; margin-bottom: 16px;
+    }
+    .kpi-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px 14px;
+    }
+    .kpi-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+    .kpi-value { font-size: 1.5rem; font-weight: 700; color: var(--accent); line-height: 1.1; }
+    .kpi-unit  { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+
+    /* METER GRID */
+    #meter-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 12px;
+    }
+    .meter-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    .meter-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; background: var(--bg3); border-bottom: 1px solid var(--border);
+    }
+    .meter-name { font-weight: 700; font-size: 0.9rem; }
+    .meter-quality {
+      font-size: 0.68rem; padding: 2px 8px; border-radius: 12px; font-weight: 600;
+    }
+    .q-GOOD      { background: rgba(63,185,80,0.15); color: var(--good); }
+    .q-STALE     { background: rgba(210,153,34,0.15); color: var(--warn); }
+    .q-COMM_LOST { background: rgba(248,81,73,0.15);  color: var(--danger); }
+    .q-DISABLED  { background: var(--bg); color: var(--muted); }
+
+    .meter-body { padding: 12px 14px; }
+    .meter-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 3px 0; border-bottom: 1px solid rgba(48,54,61,0.5);
+    }
+    .meter-row:last-child { border-bottom: none; }
+    .row-label { color: var(--muted); font-size: 0.78rem; }
+    .row-value { font-size: 0.88rem; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+    .row-unit  { font-size: 0.72rem; color: var(--muted); margin-left: 3px; }
+
+    /* PF colour */
+    .pf-good   { color: var(--good); }
+    .pf-warn   { color: var(--warn); }
+    .pf-danger { color: var(--danger); }
+
+    /* SIGN-IN PROMPT */
+    #signin-prompt {
+      text-align: center; padding: 60px 20px; color: var(--muted);
+    }
+    #signin-prompt h2 { font-size: 1.3rem; color: var(--text); margin-bottom: 10px; }
+    #signin-prompt p  { margin-bottom: 24px; line-height: 1.6; }
+    #signin-prompt button {
+      padding: 10px 28px; background: var(--accent); color: #0d1117;
+      border: none; border-radius: var(--radius); font-size: 0.95rem;
+      font-weight: 700; cursor: pointer;
+    }
+
+    /* LOADING */
+    #loading { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 0 auto 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* TOAST */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--bg3); color: var(--text); border: 1px solid var(--border);
+      padding: 8px 18px; border-radius: 20px; font-size: 0.82rem;
+      opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 500;
+    }
+    #toast.show { opacity: 1; }
+
+    @media (max-width: 500px) {
+      .kpi-value { font-size: 1.2rem; }
+      header { padding: 0 10px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-title">&#9889; Power Monitor</div>
+  <div class="header-right">
+    <span id="online-badge">&#8212;</span>
+    <button id="signin-btn">Sign In</button>
+  </div>
+</header>
+
+<main id="app">
+  <div id="loading">
+    <div class="spinner"></div>
+    Initializing...
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script src="js/dashboard.js"></script>
+</body>
+</html>
