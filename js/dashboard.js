@@ -168,8 +168,6 @@ function _onSiteChange() {
   const val = (document.getElementById('site-select').value || '').trim();
   if (!val) return;
   _siteId  = val;
-  _kwHistory = [];
-  if (_kwChart) { _kwChart.destroy(); _kwChart = null; }
   _stopListeners();
   _meterData = {};
   _siteData  = {};
@@ -181,6 +179,8 @@ function _onSiteChange() {
 // ─── Firestore listeners ───────────────────────────────────────────────────────
 function _startListeners() {
   _stopListeners();
+  _kwHistory = [];
+  if (_kwChart) { _kwChart.destroy(); _kwChart = null; }
 
   const siteRef   = _db.collection('sites').doc(_siteId);
   const metersCol = siteRef.collection('meters');
